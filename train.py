@@ -3,6 +3,7 @@ import logging
 import math
 import os
 import random
+import shutil
 import time
 from copy import deepcopy
 from pathlib import Path
@@ -473,6 +474,7 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     parser.add_argument('--linear-lr', action='store_true', help='linear LR')
+    parser.add_argument('--things2copy', nargs="*", help="things to copy in the project folder")
     opt = parser.parse_args()
 
     # Set DDP variables
@@ -514,6 +516,11 @@ if __name__ == '__main__':
     # Hyperparameters
     with open(opt.hyp) as f:
         hyp = yaml.load(f, Loader=yaml.SafeLoader)  # load hyps
+
+    # copy things:
+    Path(opt.save_dir).mkdir(exist_ok=True, parents=True)
+    for f in opt.things2copy:
+        shutil.copyfile(f, os.path.join(opt.save_dir, os.path.basename(f)))
 
     # Train
     logger.info(opt)
