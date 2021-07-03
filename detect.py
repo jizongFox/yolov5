@@ -3,16 +3,21 @@ import time
 from pathlib import Path
 
 import cv2
+import matplotlib.pyplot as plt
 import torch
 import torch.backends.cudnn as cudnn
 from numpy import random
+from pypinyin import lazy_pinyin as pinyin
 
 from models.experimental import attempt_load
 from utils.datasets import LoadStreams, LoadImages
 from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
-    scale_coords, xyxy2xywh, strip_optimizer, set_logging, increment_path
+    scale_coords, xyxy2xywh, strip_optimizer, set_logging
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized
+
+plt.rcParams['font.sans-serif'] = ['SimHei']  # Show Chinese label
+plt.rcParams['axes.unicode_minus'] = False
 
 
 def detect(save_img=False):
@@ -110,6 +115,7 @@ def detect(save_img=False):
 
                     if save_img or view_img:  # Add bbox to image
                         label = f'{names[int(cls)]} {conf:.2f}'
+                        label = "'".join(pinyin(label))
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
 
             # Print time (inference + NMS)

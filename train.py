@@ -9,6 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 from threading import Thread
 
+import matplotlib.pyplot as plt
 import numpy as np
 import torch.distributed as dist
 import torch.nn as nn
@@ -36,6 +37,8 @@ from utils.plots import plot_images, plot_labels, plot_results, plot_evolution
 from utils.torch_utils import ModelEMA, select_device, intersect_dicts, torch_distributed_zero_first, is_parallel
 
 logger = logging.getLogger(__name__)
+plt.rcParams['font.sans-serif'] = ['SimHei']  # Show Chinese label
+plt.rcParams['axes.unicode_minus'] = False
 
 
 def train(hyp, opt, device, tb_writer=None, wandb=None):
@@ -474,7 +477,7 @@ if __name__ == '__main__':
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--quad', action='store_true', help='quad dataloader')
     parser.add_argument('--linear-lr', action='store_true', help='linear LR')
-    parser.add_argument('--things2copy', nargs="*", help="things to copy in the project folder")
+    parser.add_argument('--things2copy', nargs="*", default=[], type=str, help="things to copy in the project folder")
     opt = parser.parse_args()
 
     # Set DDP variables
