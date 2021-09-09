@@ -1,15 +1,14 @@
-import argparse
 import time
-from pathlib import Path
 
+import argparse
 import cv2
 import matplotlib.pyplot as plt
 import torch
 import torch.backends.cudnn as cudnn
-from numpy import random
-from pypinyin import lazy_pinyin as pinyin
-
 from models.experimental import attempt_load
+from numpy import random
+from pathlib import Path
+from pypinyin import lazy_pinyin as pinyin
 from utils.datasets import LoadStreams, LoadImages
 from utils.general import check_img_size, check_requirements, check_imshow, non_max_suppression, apply_classifier, \
     scale_coords, xyxy2xywh, strip_optimizer, set_logging
@@ -24,6 +23,11 @@ def detect(save_img=False):
     source, weights, view_img, save_txt, imgsz = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://'))
+
+    save_crop = opt.save_cropped_images
+    if save_crop:
+        crop_save_dir = opt.save_cropped_dir
+        assert crop_save_dir is not None
 
     # Directories
     save_dir = Path(Path(opt.project) / opt.name, )  # increment run (removed)
@@ -54,8 +58,9 @@ def detect(save_img=False):
         cudnn.benchmark = True  # set True to speed up constant image size inference
         dataset = LoadStreams(source, img_size=imgsz, stride=stride)
     else:
-        save_img = True
-        dataset = LoadImages(source, img_size=imgsz, stride=stride)
+        save_img = True if not save_crop else False
+        dataset = LoadImages(source, img_size=imgsz, stride=stride, recursive=True, max_num_images=3000,
+                             max_num_videos=10)
 
     # Get names and colors
     names = model.module.names if hasattr(model, 'module') else model.names
@@ -106,17 +111,44 @@ def detect(save_img=False):
                     s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
                 # Write results
-                for *xyxy, conf, cls in reversed(det):
+                for j, (*xyxy, conf, cls) in enumerate(reversed(det)):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
                         line = (cls, *xywh, conf) if opt.save_conf else (cls, *xywh)  # label format
                         with open(txt_path + '.txt', 'a') as f:
                             f.write(('%g ' * len(line)).rstrip() % line + '\n')
 
+                    if save_crop:
+                        crop_height = int(xyxy[3]) - int(xyxy[1])
+                        crop_width = int(xyxy[2]) - int(xyxy[0])
+
+                        def crop_func():
+                            margin_height = crop_height // 2
+                            margin_wight = crop_width // 2
+
+                            crop = im0[
+                                   max(0, int(xyxy[1]) - margin_height):int(xyxy[3] + margin_height),
+                                   max(0, int(xyxy[0]) - margin_wight):int(xyxy[2] + margin_wight)
+                                   ]
+                            save_name = p.relative_to(source)
+                            filename = Path(save_name).parent / (Path(save_name).stem + f"_crop_{j:02d}.jpg")
+                            filename = str(filename)
+                            class_ = names[int(cls)]
+                            if class_ == "tieta":
+                                return
+                            Path(crop_save_dir, class_).mkdir(exist_ok=True, parents=True)
+                            cv2.imwrite(str(Path(crop_save_dir) / class_ / "_".join(filename.split("/"))), crop)
+
+                        if crop_height > 100 or crop_height > 100:
+                            crop_func()
+
                     if save_img or view_img:  # Add bbox to image
                         label = f'{names[int(cls)]} {conf:.2f}'
                         label = "'".join(pinyin(label))
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+
+                    if save_crop:
+                        pass
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
@@ -168,6 +200,8 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='runs/detect', help='save results to project/name')
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    parser.add_argument("--save_cropped_images", action="store_true", help="crop detected things.")
+    parser.add_argument("--save_cropped_dir", type=str, default=None, help="crop detected save_dir")
     opt = parser.parse_args()
     print(opt)
     check_requirements()

@@ -1,25 +1,25 @@
 # Dataset utils and dataloaders
 
+import time
+from itertools import repeat
+
+import math
+
+import cv2
 import glob
 import logging
-import math
+import numpy as np
 import os
 import random
 import shutil
-import time
-from itertools import repeat
-from multiprocessing.pool import ThreadPool
-from pathlib import Path
-from threading import Thread
-
-import cv2
-import numpy as np
 import torch
 import torch.nn.functional as F
 from PIL import Image, ExifTags
+from multiprocessing.pool import ThreadPool
+from pathlib import Path
+from threading import Thread
 from torch.utils.data import Dataset
 from tqdm import tqdm
-
 from utils.general import xyxy2xywh, xywh2xyxy, xywhn2xyxy, xyn2xy, segment2box, segments2boxes, resample_segments, \
     clean_str
 from utils.torch_utils import torch_distributed_zero_first
@@ -120,19 +120,28 @@ class _RepeatSampler(object):
 
 
 class LoadImages:  # for inference
-    def __init__(self, path, img_size=640, stride=32):
+    def __init__(self, path, img_size=640, stride=32, recursive=False, max_num_images: int = None,
+                 max_num_videos: int = None):
         p = str(Path(path).absolute())  # os-agnostic absolute path
-        if '*' in p:
-            files = sorted(glob.glob(p, recursive=True))  # glob
-        elif os.path.isdir(p):
-            files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
-        elif os.path.isfile(p):
-            files = [p]  # files
+        if not recursive:
+            if '*' in p:
+                files = sorted(glob.glob(p, recursive=True))  # glob
+            elif os.path.isdir(p):
+                files = sorted(glob.glob(os.path.join(p, '*.*')))  # dir
+            elif os.path.isfile(p):
+                files = [p]  # files
+            else:
+                raise Exception(f'ERROR: {p} does not exist')
         else:
-            raise Exception(f'ERROR: {p} does not exist')
+            assert Path(path).is_dir()
+            files = sorted([str(x) for x in Path(path).rglob("*") if x.is_file()])
 
         images = [x for x in files if x.split('.')[-1].lower() in img_formats]
         videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
+        if max_num_images:
+            images = np.random.permutation(images)[: max_num_images].tolist()
+        if max_num_videos:
+            videos = np.random.permutation(videos)[: max_num_videos].tolist()
         ni, nv = len(images), len(videos)
 
         self.img_size = img_size
@@ -1031,6 +1040,7 @@ def extract_boxes(path='../coco128/'):  # from utils.datasets import *; extract_
                     b[[0, 2]] = np.clip(b[[0, 2]], 0, w)  # clip boxes outside of image
                     b[[1, 3]] = np.clip(b[[1, 3]], 0, h)
                     assert cv2.imwrite(str(f), im[b[1]:b[3], b[0]:b[2]]), f'box failure in {f}'
+
 
 def autosplit(path='../coco128', weights=(0.9, 0.1, 0.0), annotated_only=False):
     """ Autosplit a dataset into train/val/test splits and save path/autosplit_*.txt files

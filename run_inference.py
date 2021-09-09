@@ -1,12 +1,24 @@
-import subprocess
-from pathlib import Path
-
 import yaml
-from itertools import cycle
+from gpu_queue import JobSubmitter
+from pathlib import Path
 
 
 def path2Path(path):
     return Path(path) if isinstance(path, str) else path
+
+
+"""
+# !/bin/bash
+python - O
+detect.py - -weight / home / jizong / UserSpace / 电力项目 / dataset_2 - 3 / checkpoint / weights / best.pt - -source / home / jizong / UserSpace / 电力项目 / dataset2_210616 / videos / 110
+kV坪罗线\  # 013.MP4     --name /home/jizong/UserSpace/电力项目/dataset_2-3/checkpoint/detect/videos  --augment &
+python - O
+detect.py - -weight / home / jizong / UserSpace / 电力项目 / dataset_2 - 3 / checkpoint / weights / best.pt - -source / home / jizong / UserSpace / 电力项目 / dataset2_210616 / videos / 220
+kV磁坪一二回线  # 012.MP4     --name /home/jizong/UserSpace/电力项目/dataset_2-3/checkpoint/detect/videos  --augment &
+python - O
+detect.py - -weight / home / jizong / UserSpace / 电力项目 / dataset_2 - 3 / checkpoint / weights / best.pt - -source / home / jizong / UserSpace / 电力项目 / dataset2_210616 / videos / DJI_0137.MP4 - -name / home / jizong / UserSpace / 电力项目 / dataset_2 - 3 / checkpoint / detect / videos - -augment
+wait
+"""
 
 
 def load_test_video_names(yaml_path):
@@ -17,39 +29,34 @@ def load_test_video_names(yaml_path):
 def script_generator(weight, save_dir, source):
     return f" python detect.py   " \
            f"--weights '{weight}'  " \
-           f"--augment --project '{save_dir}'  " \
+           f"--augment " \
            f"--source '{source}' " \
-           f"--name=''"
+           f"--name={save_dir} "
 
 
-def main(checkpoint_folder: str, raw_video_folder: str):
-    checkpoint_folder = path2Path(checkpoint_folder)
-    assert checkpoint_folder.exists()
-    assert checkpoint_folder.is_dir()
-    raw_video_folder = path2Path(raw_video_folder).absolute()
-    assert raw_video_folder.exists()
-    assert raw_video_folder.is_dir()
-    weight_path = checkpoint_folder / "weights" / "best.pt"
-    save_dir = checkpoint_folder / "inference_test"
-    test_videos = load_test_video_names(str(checkpoint_folder / "split.yaml"))
-    # test_videos = Path("/home/jizong/UserSpace/LabelBox/raw/kurger_test").rglob("*/*.mp4")
-    for v in cycle(test_videos):
-        source = str(raw_video_folder / str(v))
-        script = script_generator(str(weight_path), save_dir=str(save_dir), source=source),
-        code = subprocess.run(script, shell=True, executable="/usr/bin/zsh")
-        if code.returncode != 0:
-            raise RuntimeError(script)
+def find_videos(root):
+    video_paths = sorted(Path(root).glob("*.MOV"))
+    return [str(x) for x in video_paths]
+
+
+def main(video_root, save_dir, weight_path):
+    videos = find_videos(video_root)
+    assert len(videos) > 0, video_root
+    jobs = [script_generator(weight=weight_path, save_dir=save_dir, source=v) for v in videos]
+    submitor = JobSubmitter(jobs, available_gpus=["0"])
+    submitor.submit_jobs()
 
 
 def get_args():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint-folder", required=True, type=str, help="checkpoint folder")
-    parser.add_argument("--raw-video-folder", required=True, type=str, help="raw video folder")
+    parser.add_argument("--checkpoint-weight", required=True, type=str, help="checkpoint path")
+    parser.add_argument("--video-root", "-r", required=True, type=str, help="raw video folder")
+    parser.add_argument("--save-dir", "-s", required=True, type=str, help="save-dir")
 
     return parser.parse_args()
 
 
 if __name__ == '__main__':
     args = get_args()
-    main(args.checkpoint_folder, args.raw_video_folder)
+    main(args.video_root, args.save_dir, args.checkpoint_weight)
